@@ -31,62 +31,84 @@ class Sim:
         self.states = set()
         self.state_transitions = state_transitions # of 
         self.state = state
+        self.tick = 0
         
     def alter(self, action):
         if action in self.state_transitions[self.state]:
             print("'world' moves from " + self.state, end="")
             self.state = self.state_transitions[self.state][action]
+
             print(" to " + self.state)
         else:
             self.state = self.state # unchanged, the NULL action    
-    
+        self.tick += 1    
 
 
 class Model:
-    def __init__(self, observations=None, actions=None, weights=None, rewards=None):
-        self.observations = observations
+    def __init__(self, observations=None, actions=None, weights=None, rewards=None, horizon=100):
+        
         self.actions = actions
         self.weights = dict()
         self.rewards = rewards
-    
+        self.horizon = horizon
+        
+        self.observer = observations
+        self.prior_observations = ["A1", "A2", "B1", "B2"] # Let the observations change over time, let new replace old, let nothing be completely new, and nothing completely deja vuet
     
     def action(self, observation):
         a = random.choice(actions)
         return a
-    
+    """ Obselete:
     def observe(self, state):
         return self.observations[state]
-    
+    """
     def reward(self, state):
         return rewards[state]
         
     def train(self, sim):
-        for j in range(0, 100):
-            observation = self.observe(sim.state)
-            action = self.action(observation)
+        for j in range(0, self.horizon):
+            observation = Observation(sim.state, self.observer, self.prior_observations)
+            action = self.action(observation.name)
             sim.alter(action)
-            reward = self.reward(self.observe(sim.state))
-            if observation in self.weights.keys():
-                if action in self.weights[observation].keys():
-                    self.weights[observation][action] = reward
+            reward = self.reward(Observation(sim.state, self.observer, self.prior_observations).name)
+            if observation.name in self.weights.keys():
+                if action in self.weights[observation.name].keys():
+                    self.weights[observation.name][action] = reward
                 else:
-                    self.weights[observation][action] = reward
+                    self.weights[observation.name][action] = reward
             else:
-                self.weights[observation] = dict()
-                self.weights[observation][action] = reward
+                self.weights[observation.name] = dict()
+                self.weights[observation.name][action] = reward
     
     def execute(self, real):
         for j in range(0, 100):
-            observation = self.observe(real.state)
-            action = self.policy[observation]
+            observation = Observation(real.state, self.observer, self.prior_observations)
+            action = self.policy[observation.name]
             real.alter(action)
             
                 
     def freeze(self):
         policy = dict()
-        for observation in self.weights.keys():
-            policy[observation] = max(self.weights[observation], key=self.weights[observation].get)
+        for observation_name in self.weights.keys():
+            policy[observation_name] = max(self.weights[observation_name], key=self.weights[observation_name].get)
         self.policy = policy
+    
+class Observation:
+    def __init__(self, trace, observer=None, priors=None): # trace ought to be minimal, observer is a substitute function for 'make'
+        self.object = trace
+        self.observer = observer
+        self.priors = priors
+        
+        self.name = self.make(trace)
+        
+    def make(self, trace):
+        for name in self.priors:
+            # cheaty similarity function
+            if trace.capitalize() == name:
+                # Add "new" observation,
+                return name #
+        
+        
 
     
         
@@ -120,6 +142,7 @@ if __name__ == "__main__":
     m.freeze()
     r = Real(states, state_transitions, states[0])
     m.execute(r)
+    print("Executed with policy " + str(m.policy))
     
     
     
