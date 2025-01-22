@@ -45,10 +45,12 @@ class Sim:
 
 
 class Model:
-    def __init__(self, observations=None, actions=None, weights=None, rewards=None, horizon=100):
+    def __init__(self, observations=None, actions=None, weights=None, rewards=None, epsilon=1, horizon=100):
         
         self.actions = actions
+
         self.weights = dict()
+
         self.rewards = rewards
         self.horizon = horizon
         
@@ -56,7 +58,10 @@ class Model:
         self.prior_observations = ["A1", "A2", "B1", "B2"] # Let the observations change over time, let new replace old, let nothing be completely new, and nothing completely deja vuet
     
     def action(self, observation):
-        a = random.choice(actions)
+        if random.random() < epsilon:
+            a = random.choice(actions)
+        else:
+            a = max(self.weights[observation_name], key=self.weights[observation_name].get)
         return a
     """ Obselete:
     def observe(self, state):
@@ -67,39 +72,42 @@ class Model:
         
     def train(self, sim):
         for j in range(0, self.horizon):
-            observation = Observation(sim.state, self.observer, self.prior_observations)
-            action = self.action(observation.name)
+            observation = Observation(sim.state, j, self.observer, self.prior_observations)
+            action = self.action(observation.content)
             sim.alter(action)
-            reward = self.reward(Observation(sim.state, self.observer, self.prior_observations).name)
-            if observation.name in self.weights.keys():
-                if action in self.weights[observation.name].keys():
-                    self.weights[observation.name][action] = reward
+            reward = self.reward(Observation(sim.state, self.observer, self.prior_observations).content)
+            if observation.content in self.weights.keys():
+                if action in self.weights[observation.content].keys():
+                    self.weights[observation.content][action] = reward
                 else:
-                    self.weights[observation.name][action] = reward
+                    self.weights[observation.content][action] = reward
             else:
-                self.weights[observation.name] = dict()
-                self.weights[observation.name][action] = reward
+                self.weights[observation.content] = dict()
+                self.weights[observation.content][action] = reward
     
     def execute(self, real):
         for j in range(0, 100):
             observation = Observation(real.state, self.observer, self.prior_observations)
-            action = self.policy[observation.name]
+            action = self.policy[observation.content]
             real.alter(action)
             
                 
     def freeze(self):
         policy = dict()
-        for observation_name in self.weights.keys():
-            policy[observation_name] = max(self.weights[observation_name], key=self.weights[observation_name].get)
+        for observation_content in self.weights.keys():
+            policy[observation_content] = max(self.weights[observation_name], key=self.weights[observation_name].get)
         self.policy = policy
+        return policy
     
 class Observation:
-    def __init__(self, trace, observer=None, priors=None): # trace ought to be minimal, observer is a substitute function for 'make'
+    def __init__(self, trace, time, observer=None, priors=None): # trace ought to be minimal, observer is a substitute function for 'make'
         self.object = trace
+        self.time = time
         self.observer = observer
         self.priors = priors
         
-        self.name = self.make(trace)
+        self.content = self.make(trace)
+        self.time
         
     def make(self, trace):
         for name in self.priors:
@@ -108,7 +116,41 @@ class Observation:
                 # Add "new" observation,
                 return name #
         
+class Agent:
+    def __init__(self, policy=None):
+        self.master_policy = policy
+        self.frozen_policies = dict()
+        self.tasks = ["chug"]
         
+    def execute(self, plan):
+        for action in plan:
+            if action in self.tasks:
+                print(action)
+            else:
+                # rl
+                environment = e # another perceived thing
+                observation = "A1"
+                # What's the environment? target?
+                if environment in environments:
+                    if theres a model for environment,
+                        does it converge?
+                        if not 
+                if not create environment
+                    make a model
+                    converge it
+            all of this happens on seperate threads
+                
+                
+                
+                
+                  
+    def recall(self):
+        if env in self.frozen_policies.keys():
+            policy = self.frozen_policies[env]
+        else:
+            # make env, train, act
+            pass
+            
 
     
         
