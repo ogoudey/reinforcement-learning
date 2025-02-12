@@ -56,7 +56,8 @@ class Policy:
         else:
             action = None
         return action
-""" 
+
+
 class State:
     def __init__(self):
         self.content = ""
@@ -72,7 +73,6 @@ class State:
             _return += reward * (gamma ** i) # discounting
             i += 1
         return _return
-"""
 
 def value(state, policy, sim=None):
     if not sim:
