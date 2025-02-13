@@ -1,5 +1,7 @@
 import random
 
+from tqdm import tqdm
+
 class Trainer:
     def __init__(self):
 
@@ -14,28 +16,53 @@ class Trainer:
             m.train(s) # or s.train(m) 
 
 class Sim:
-    def __init__(self, alter_function, initial_state, state_transitions, rewards):
-        self.alter = alter_function
+    def __init__(self, initial_state, state_transitions, rewards):
         self.initial_state = initial_state
         self.state = initial_state
         self.state_transitions = state_transitions
-        self.rewards = rewards
+        self.init_rewards = rewards
+        self.rewards = rewards.copy()
         
     def reset(self):
         self.state =  self.initial_state
+        self.rewards = self.init_rewards.copy()
+        rewards = self.init_rewards.copy()
            
-    def test(self, policy, n=100, h=100):
+    def test(self, policy, n=1000, h=100):
+        rewards = 0
         for i in range(0, n):
             self.reset()
-            rewards = 0
             for j in range(0, h):
                 action = policy.action(self.state)
                 self.state, reward = self.alter(self.state, action)
                 rewards += reward
+        rewards /= n
+        print(rewards)
+        
+    def alter(self, state, action):
+        if action:
+            if state in self.state_transitions.keys():
+                if action in self.state_transitions[state]: # should be if Line l - 5 is complete
+                    new_state = self.state_transitions[state][action]
+                else:
+                    new_state = state
+            else:
+                new_state = state
                 
-                # run until finish
-                # but which states are available when?
-                # lets make G -> G so only G reward for each episode
+            if state in self.rewards.keys():
+                if action in self.rewards[state]:
+                    reward = self.rewards[state][action]
+                    self.rewards[state][action] = 0 # So rewards can not be 'farmed'
+                else:
+                    reward = 0
+            else:
+                reward = 0
+                
+        else:
+            new_state = state
+            reward = 0
+            
+        return new_state, reward
         
 
 
@@ -78,7 +105,7 @@ class Policy:
     
     def from_QTable_greedy(self, table):
         # Assuming table - policy/action agreement
-        for state in states:
+        for state in self.states:
             self.action_selections[state] = max(table.table[state], key=table.table[state].get)
         
 """
@@ -99,18 +126,18 @@ class State:
         return _return
 """
 
-def value(state, action, policy, sim=None):
-    if not sim:
-        sim = Sim(alter, initial_state, state_transitions, rewards)
-    i = 0
-    _return = 0
-    state_p = state
-    rewards = []
-    while i < 5:
+def value(state, action, policy, sim, horizon=5):
+    sim.reset()
+    
+    
+    action = policy.action(state)
+    state_p, reward = sim.alter(state, action)
+    _return = reward
+    i = 1
+    while i < horizon:
         action = policy.action(state_p)
         state_p, reward = sim.alter(state_p, action)
         _return += reward * (gamma ** i) # discounting
-        rewards.append(reward * (gamma ** i))
         i += 1
     return _return    
 
@@ -131,8 +158,9 @@ class QTable:
                 self.table[state] = dict()
             self.table[state][action] = average_return
     
-    def train(self, base_policy, n, sim):
-        for state in states:
+    def train(self, base_policy, n, sim, horizon):
+        self.table = dict() # restart table
+        for state in tqdm(self.states):
             average_returns = dict()
             action_cnts = dict()
             for i in range(0, n):
@@ -140,17 +168,18 @@ class QTable:
                 if not action in average_returns.keys():
                     average_returns[action] = 0
                     action_cnts[action] = 0
-                average_returns[action] += value(state, action, base_policy, sim)
+                average_returns[action] += value(state, action, base_policy, sim, horizon)
                 action_cnts[action] += 1
-            for action in average_returns:
+            for action in average_returns.keys():
                 average_returns[action] /= action_cnts[action]
             
             if not state in self.table.keys():
                 self.table[state] = dict()
             for action in average_returns.keys():
                 self.table[state][action] = average_returns[action]
-                print(state + " with action " + action + " has " + str(average_returns[action]))
-            print(action_cnts)
+            #print(str(state) + " with action " + str(action) + " has " + str(average_returns[action]))
+            #print(action_cnts)
+            
 # "environment" variables
 """
 states = set()
@@ -159,39 +188,58 @@ state_transitions = {states:{actions:states}} # S x A x S -- currently not pytho
 rewards = {}
 initial_state = "..."
 """               
-
+"""
 gamma = .5
-
 states = {"S", "1", "2", "3", "4", "G"}
 actions = {"N", "S", "E", "W"}
 policy_choices = {"S":"N", "2":"N", "1":"E", "3":"E", "4":"E"}
 state_transitions = {"S":{"N":"2", "S":"S"}, "2":{"N":"1"}, "1":{"E":"3", "S":"S"}, "3":{"E":"4"}, "4":{"E":"G"}, "G":{"E":"G"}} # S x A x S -- currently not python
 rewards = {"4":{"E":100}, "1":{"S":10}}
 initial_state = "1"
+"""
 
-def alter(state, action):
-    if action:
-        if state in state_transitions.keys():
-            if action in state_transitions[state]: # should be if Line l - 5 is complete
-                new_state = state_transitions[state][action]
-            else:
-                new_state = state
-        else:
-            new_state = state
-            
-        if state in rewards.keys():
-            if action in rewards[state]:
-                reward = rewards[state][action]
-            else:
-                reward = 0
-        else:
-            reward = 0
-            
+import numpy as np
+np.set_printoptions(threshold=np.inf)
+states = set()
+state_transitions = dict()
+m = np.zeros((12,12))
+mapped = []
+
+def _map(y,x):
+    states.add((y,x))
+    mapped.append((y,x))
+    state_transitions[(y,x)] = dict()
+    if x + 1 >= m.shape[0]:
+        state_transitions[(y,x)]["E"] = (y,x)
     else:
-        new_state = state
-        reward = 0
-        
-    return new_state, reward
+        state_transitions[(y,x)]["E"] = (y,x + 1)
+        if not (y,x + 1) in mapped:
+            _map(y,x+1)
+    if x - 1 < 0:
+        state_transitions[(y,x)]["W"] = (y,x)
+    else:
+        state_transitions[(y,x)]["W"] = (y,x - 1)
+        if not (y,x - 1) in mapped:
+            _map(y,x-1)
+    if y + 1 >= m.shape[0]:
+        state_transitions[(y,x)]["S"] = (y,x)
+    else:
+        state_transitions[(y,x)]["S"] = (y + 1,x)
+        if not (y+1,x) in mapped:
+            _map(y+1,x)
+    if y - 1 < 0:
+        state_transitions[(y,x)]["N"] = (y,x)
+    else:
+        state_transitions[(y,x)]["N"] = (y-1,x)
+        if not (y-1,x) in mapped:
+            _map(y-1,x)
+
+gamma = 0.9
+actions = {"N", "S", "E", "W"}
+rewards = {(11,10):{"E":100}, (10,11):{"S":100}, (0,0):{"S":10}}
+initial_state = (0,0)
+
+
     
 
 # should take a policy, an attribute of a model
@@ -203,12 +251,15 @@ def run(model, sim, episode_length=10):
         # why we doing this?
 
 def teleop():
-    s = Sim(alter, initial_state, state_transitions, rewards)
+    s = Sim(initial_state, state_transitions, rewards.copy())
     state = s.initial_state
     while True:
-        action = input(">")
+        action = input("> ")
         state, reward = s.alter(state, action)
-        print(state + ", " + str(reward))
+        n = m.copy()
+        n[state] = 1
+        print(n)
+        print(str(state) + ", " + str(reward))
         # Could collect data in this time, for human_policy
         
 # for all states:
@@ -226,11 +277,11 @@ def teleop():
 #
 #
 # Then, states are bins of continuous space
-s = Sim(alter, initial_state, state_transitions, rewards)
+s = Sim(initial_state, state_transitions, rewards.copy())
 policy = Policy(states, actions, preset=None, random=True)
 s.test(policy)
 qtable = QTable(states)
-qtable.train(policy, 36, s) # Qtable now has returns from random walks from all states
+qtable.train(policy, 36, s, 10) # Qtable now has returns from random walks from all states
 new_policy = Policy(states, actions, preset=None, random=False)
 new_policy.from_QTable_greedy(qtable.table) # policy now has valuable actions
 s.test(new_policy)
@@ -242,7 +293,7 @@ if __name__ == "__main__":
     num_iterations = 1
     #m.iterate_with(sim)
     for i in range(0, num_iterations):
-        sim = Sim(alter, initial_state, state_transitions, rewards)
+        sim = Sim(initial_state, state_transitions, rewards)
         run(m, sim)
         
 """
