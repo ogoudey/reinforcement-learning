@@ -20,18 +20,7 @@ def main():
     #s.visualize(p, 100, (3,3))
     #s.visualize(p, 100, (4,4))
     s.visualize(p, 100, (5,5))
-    
-    
-    s.test(p, 100, 100, (0,0))
-    s.test(p, 100, 100, (5,5))
-    
-    
-    
-    s.test(rp, 100, 100, (5,5))
-    
-    s.test(p, 100, 100, (5,5))
-    
-    s.test(p, 100, 100, (10,10))
+
     
 class TrainedPolicy:
     def __init__(self):

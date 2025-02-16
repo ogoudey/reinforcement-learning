@@ -45,7 +45,7 @@ _map(0,0)
 state_transitions[(11,11)] = {"N":(11,11), "S":(11,11), "E":(11,11), "W":(11,11)}
 gamma = 0.9
 actions = {"N", "S", "E", "W"}
-rewards = {(11,10):{"E":100}, (10,11):{"S":100}, (0,0):{"S":10}}
+rewards = {(11,10):{"E":100}, (10,11):{"S":100}}
 initial_state = (0,0)
 
 def value(state, action, policy, sim, horizon=5):
@@ -87,6 +87,8 @@ class Sim:
         self.rewards = copy.deepcopy(self.init_rewards)
         
     def visualize(self, policy, h, initial_state=None, no_reset=False):
+        if not initial_state:
+            initial_state = self.initial_state
         if no_reset:
             pass
         else:
@@ -162,13 +164,14 @@ class Policy:
         self.random = random
     
     def action(self, state):
-        if self.random:
-            action = random.choice(list(self.actions))
-            return action
+        
         if state in self.action_selections.keys():
             action = self.action_selections[state]
         else:
-            action = None
+            if self.random:
+                action = random.choice(list(self.actions))
+            else:
+                action = None
         return action
     
     def from_QTable_greedy(self, table):
@@ -184,16 +187,6 @@ class QTable:
         self.table = dict()
         pass
 
-    def train2(self, base_policy, n, sim):
-        for state in states:
-            average_return = 0
-            for i in range(0, n):
-                action = base_policy.action(state)
-                average_return += value(state, action, base_policy, sim)
-            average_return /= n
-            if not state in self.table.keys():
-                self.table[state] = dict()
-            self.table[state][action] = average_return
     
     def train(self, base_policy, n, sim, horizon):
         self.table = dict() # restart table
@@ -216,20 +209,34 @@ class QTable:
                 self.table[state][action] = average_returns[action]
 
 def teleop(fallback_policy=None):
+    gen_policy = dict()
     s = Sim(initial_state, state_transitions, rewards.copy())
     state = s.initial_state
     render(state, "...")
-    while True:
-        action = input("> ")
-        if action == "":
-            if not fallback_policy: # last minute
-                fallback_policy = olicy(states, actions, None, True)
-            state = s.visualize(fallback_policy, 100, state)
-        else:
-            state, reward = s.alter(state, action)
-        render(state, reward)
-        # Could collect data in this time, for human_policy
-        
+    try:    
+        while True:
+            action = input("> ")
+            if action == "":
+                if not fallback_policy: # last minute
+                    fallback_policy = Policy(states, actions, None, True)
+                state = s.visualize(fallback_policy, 100, state)
+            else:
+                if not state in gen_policy.keys():
+                    gen_policy[state] = dict()
+                if not action in gen_policy[state].keys():
+                    gen_policy[state][action] = 0
+                gen_policy[state][action] += 1
+                state, reward = s.alter(state, action)
+            render(state, reward)
+            # Could collect data in this time, for human_policy
+    except KeyboardInterrupt:
+            
+            action_selections = dict()
+            for state in gen_policy.keys():
+                action_selections[state] = max(gen_policy[state], key=gen_policy[state].get)
+            h_policy = Policy(states, actions, action_selections, True) 
+            print("\nGenerated policy.")
+            return h_policy
 # for all states:
 # if I do action a in state s (then act randomly) what's the expected reward
 # gets VVVVV
