@@ -43,7 +43,7 @@ def _map(y,x):
 
 _map(0,0)
 state_transitions[(11,11)] = {"N":(11,11), "S":(11,11), "E":(11,11), "W":(11,11)}
-gamma = 0.9
+gamma = 0.999
 actions = {"N", "S", "E", "W"}
 rewards = {(11,10):{"E":100}, (10,11):{"S":100}}
 initial_state = (0,0)
@@ -188,7 +188,7 @@ class QTable:
         pass
 
     
-    def train(self, base_policy, n, sim, horizon):
+    def train_deprecated(self, base_policy, n, sim, horizon):
         self.table = dict() # restart table
         for state in tqdm(self.states):
             average_returns = dict()
@@ -207,7 +207,50 @@ class QTable:
                 self.table[state] = dict()
             for action in average_returns.keys():
                 self.table[state][action] = average_returns[action]
-
+    
+    def V(self, state, action, policy, alpha, sim, steps_left, step):
+        # if at horizon return 0
+        #print("in state " + str(state) + " with " + str(steps_left) + " steps left.")
+        if steps_left == 0:
+            return 0
+            
+        # V for (s, a) is based on the reward
+        state_p, reward = sim.alter(state, action)
+        
+        # it's also based on V for (s', a')
+        
+        action_p = policy.action(state_p)
+        V_prime = self.V(state_p, action_p, policy, alpha, sim, steps_left - 1, step + 1)
+        #print("returning " + str(V_prime) + " from state " + str(state))
+        # now we can access V(s', a')
+        return reward + (gamma**step)*V_prime
+        
+        
+                
+    def train(self, policy, alpha, n, sim, horizon, verbose=True):
+        self.table = dict() # restart table
+        for state in tqdm(self.states):
+            sim.reset()
+            # given a state
+            self.table[state] = dict()
+            print("on state " + str(state))
+            for i in range(0, n):
+                action = policy.action(state)
+                # compute V for (s, a)
+                state_p, reward = sim.alter(state, action)
+                action_p = policy.action(state_p)
+                #print("computing V' for state " + str(state) + " on action " + str(action) + " which leads first to " + str(state_p))
+                V_prime = self.V(state_p, action_p, policy, alpha, sim, horizon - 1, 0)
+                #print("V' for state " + str(state) + " on action " + str(action) + " is " + str(V_prime))
+                if action in self.table[state].keys():
+                    self.table[state][action] += alpha * (reward + 1*V_prime  - self.table[state][action])
+                else:
+                    self.table[state][action] = alpha * (reward + 1*V_prime )
+                
+            
+            
+           
+                
 def teleop(fallback_policy=None):
     gen_policy = dict()
     s = Sim(initial_state, state_transitions, rewards.copy())
