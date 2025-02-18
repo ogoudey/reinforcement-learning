@@ -71,6 +71,7 @@ def render(state, reward=0):
     print(n)
     print(str(state) + ", " + str(reward))
 
+
 class Sim:
     def __init__(self, initial_state, state_transitions, init_rewards):
         self.initial_state = initial_state
@@ -102,10 +103,10 @@ class Sim:
                self.state, reward = self.alter(self.state, action)
                render(self.state, reward)
                if reward == 100:
-                   render(self.state, "100 reward received.")
+                   render(self.state, "100 reward received in " + str(j) + " steps.")
                    time.sleep(3)
                    break
-               time.sleep(1)
+               time.sleep(.5)
         except KeyboardInterrupt:
             return self.state
             print("\nExiting visualization.")
@@ -156,17 +157,18 @@ class Sim:
 class Policy:
     def __init__(self, states, actions, preset=None, random=False):
         if preset:
-            self.action_selections = preset # States -> A
+            self.action_probabilities = preset # States -> A
         else:
-            self.action_selections = dict()
+            self.action_probabilities = dict()
         self.states = states
         self.actions = actions
         self.random = random
     
     def action(self, state):
         
-        if state in self.action_selections.keys():
-            action = self.action_selections[state]
+        if state in self.action_probabilities.keys():
+            print(self.action_probabilities[state])
+            action = random.choices(list(self.action_probabilities[state].keys()), list(self.action_probabilities[state].values()))[0]
         else:
             if self.random:
                 action = random.choice(list(self.actions))
@@ -177,7 +179,18 @@ class Policy:
     def from_QTable_greedy(self, table):
         # Assuming table - policy/action agreement
         for state in tqdm(self.states):
-            self.action_selections[state] = max(table.table[state], key=table.table[state].get)
+            sum_of_values = 0
+            print(table.table[state])
+            for action in table.table[state].keys():
+                sum_of_values += table.table[state][action]
+            
+            self.action_probabilities[state] = dict()
+            for action in table.table[state].keys():
+                if sum_of_values == 0:
+                    self.action_probabilities[state][action] = 0
+                else:
+                    self.action_probabilities[state][action] = table.table[state][action] / sum_of_values
+
 
 
 

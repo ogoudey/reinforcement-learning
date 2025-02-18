@@ -7,7 +7,7 @@ def main():
 
     s = rl.Sim(rl.initial_state, rl.state_transitions, rl.rewards)
 
-    qt.train(rp, 1000, s, 100)
+    qt.train(rp, 10000, s, 100)
 
     p = rl.Policy(rl.states, rl.actions)
 
@@ -20,6 +20,8 @@ def main():
     #s.visualize(p, 100, (3,3))
     #s.visualize(p, 100, (4,4))
     s.visualize(p, 100, (5,5))
+    print("Returning (sim, policy)")
+    return s, p
 
     
 class TrainedPolicy:
