@@ -45,7 +45,7 @@ _map(0,0)
 state_transitions[(11,11)] = {"N":(11,11), "S":(11,11), "E":(11,11), "W":(11,11)}
 gamma = 0.9
 actions = {"N", "S", "E", "W"}
-rewards = {(11,10):{"E":100}, (10,11):{"S":100}}
+rewards = {(11,10):{"E":(100, 0)}, (10,11):{"S":(100, 0)}, (0, 11):{"S":(0, 50)}}
 initial_state = (0,0)
 
 def value(state, action, policy, sim, horizon=5):
@@ -53,16 +53,17 @@ def value(state, action, policy, sim, horizon=5):
     state_p, reward = sim.alter(state, action)
     _return = reward
     returns = []
-    #returns.append(str(reward) + " * "+str(gamma) + " ** " +str(0)+ " = " + str(reward * (gamma ** 0)))
+    #print(horizon)
+    #returns.append(str(reward) + " * "+str(gamma) + " ** " +str(0)+ " = " + str(e * (gamma ** 0) for e in reward))
     i = 1
     while i < horizon:
         action = policy.action(state_p)
         state_p, reward = sim.alter(state_p, action)
-
-        _return += reward * (gamma ** i) # discounting
-        #returns.append(str(reward) + " * "+str(gamma) + " ** " +str(i)+ " = " + str(reward * (gamma ** i)))
+        _return = [i + j for i, j in zip(_return, (e * (gamma ** i) for e in reward))] # discounting
+        #returns.append(str(reward) + " * "+str(gamma) + " ** " +str(i)+ " = " + str(e * (gamma ** i) for e in reward))
+        #print(str(state_p) + str(action) + str(reward))
         i += 1
-    #print(returns)
+
     return _return    
 
 def render(state, reward=0):
@@ -102,11 +103,12 @@ class Sim:
                action = policy.action(self.state)
                self.state, reward = self.alter(self.state, action)
                render(self.state, reward)
-               if reward == 100:
+               if reward[0] == 100:
                    render(self.state, "100 reward received in " + str(j) + " steps.")
                    time.sleep(3)
-                   break
-               time.sleep(.5)
+                   return self.state
+               time.sleep(1)
+
         except KeyboardInterrupt:
             return self.state
             print("\nExiting visualization.")
@@ -115,16 +117,17 @@ class Sim:
            
            
     def test(self, policy, n=1000, h=100, initial_state=None):
-        rewards = 0
+        rewards = (0,0)
         for i in range(0, n):
             self.reset(initial_state)
             for j in range(0, h):
                 action = policy.action(self.state)
                 self.state, reward = self.alter(self.state, action)
-                rewards += reward
-        rewards /= n
+                rewards = [k + l for k, l in zip(rewards, reward)]
+        rewards = [i / n for i in rewards] 
 
         print("Average cumulative reward over " + str(n) + " tries: " + str(rewards))
+        print("Reward structure:\n" + str(self.init_rewards))
 
         
     def alter(self, state, action):
@@ -141,17 +144,16 @@ class Sim:
                 if action in self.rewards[state]:
                     reward = self.rewards[state][action]
                     #print("resetting " + str(self.rewards[state][action]))
-                    self.rewards[state][action] = 0 # So rewards can not be 'farmed'
+                    self.rewards[state][action] = (0, 0) # So rewards can not be 'farmed'
                     #print(self.init_rewards[state][action])
                 else:
-                    reward = 0
+                    reward = (0,0)
             else:
-                reward = 0
+                reward = (0,0)
                 
         else:
             new_state = state
-            reward = 0
-            
+            reward = (0,0)
         return new_state, reward
 
 class Policy:
@@ -167,31 +169,43 @@ class Policy:
     def action(self, state):
         
         if state in self.action_probabilities.keys():
-            print(self.action_probabilities[state])
+            #print(self.action_probabilities[state])
             action = random.choices(list(self.action_probabilities[state].keys()), list(self.action_probabilities[state].values()))[0]
         else:
             if self.random:
                 action = random.choice(list(self.actions))
+                #print(str(action) + " from " + str(self.actions))
             else:
                 action = None
         return action
     
-    def from_QTable_greedy(self, table):
+    def from_QTable_greedy(self, table, reward_index=0):
         # Assuming table - policy/action agreement
+
         for state in tqdm(self.states):
+
             sum_of_values = 0
             print(table.table[state])
             for action in table.table[state].keys():
-                sum_of_values += table.table[state][action]
+                sum_of_values += table.table[state][action][reward_index]
             
             self.action_probabilities[state] = dict()
             for action in table.table[state].keys():
                 if sum_of_values == 0:
                     self.action_probabilities[state][action] = 0
                 else:
-                    self.action_probabilities[state][action] = table.table[state][action] / sum_of_values
+                    self.action_probabilities[state][action] = table.table[state][action][reward_index] / sum_of_values
 
-
+"""
+            actions = table.table[state]
+            best_action = None
+            max_return = (-999, -999)
+            
+            for action in actions.keys():
+                if max_return[reward_index] < actions[action][reward_index]:
+                    best_action, max_return = (action, actions[action])
+            self.action_selections[state] = best_action
+"""
 
 
 class QTable:
@@ -209,12 +223,12 @@ class QTable:
             for i in range(0, n):
                 action = base_policy.action(state)
                 if not action in average_returns.keys():
-                    average_returns[action] = 0
+                    average_returns[action] = (0,0)
                     action_cnts[action] = 0
-                average_returns[action] += value(state, action, base_policy, sim, horizon)
+                average_returns[action] = [i + j for i, j in zip(average_returns[action], value(state, action, base_policy, sim, horizon))]
                 action_cnts[action] += 1
             for action in average_returns.keys():
-                average_returns[action] /= action_cnts[action]
+                average_returns[action] = [i / action_cnts[action] for i in average_returns[action]]
             
             if not state in self.table.keys():
                 self.table[state] = dict()
@@ -229,10 +243,10 @@ def teleop(fallback_policy=None):
     try:    
         while True:
             action = input("> ")
-            if action == "":
+            if not action in actions:
                 if not fallback_policy: # last minute
                     fallback_policy = Policy(states, actions, None, True)
-                state = s.visualize(fallback_policy, 100, state)
+                state = s.visualize(fallback_policy[int(action)], 100, state)
             else:
                 if not state in gen_policy.keys():
                     gen_policy[state] = dict()
@@ -248,7 +262,7 @@ def teleop(fallback_policy=None):
             for state in gen_policy.keys():
                 action_selections[state] = max(gen_policy[state], key=gen_policy[state].get)
             h_policy = Policy(states, actions, action_selections, True) 
-            print("\nGenerated policy.")
+
             return h_policy
 # for all states:
 # if I do action a in state s (then act randomly) what's the expected reward
