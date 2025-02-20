@@ -72,7 +72,7 @@ def render(state, reward=0):
     print(str(state) + ", " + str(reward))
 
 class Sim:
-    def __init__(self, initial_state, state_transitions, init_rewards):
+    def __init__(self, initial_state, state_transitions, init_rewards={(11,10):{"E":100}, (10,11):{"S":100}}):
         self.initial_state = initial_state
         self.state = initial_state
         self.state_transitions = state_transitions
@@ -174,11 +174,15 @@ class Policy:
                 action = None
         return action
     
-    def from_QTable_greedy(self, table):
+    def from_Table_greedy(self, table):
         # Assuming table - policy/action agreement
+        print("State overlap: " + str(len(list(table.keys()))/len(list(self.states))))
         for state in tqdm(self.states):
-            self.action_selections[state] = max(table.table[state], key=table.table[state].get)
-
+            if state in table.keys():
+            
+                self.action_selections[state] = max(table[state], key=table[state].get)
+            else:
+                print("State " + state + " has no data in table.")
 
 
 class QTable:
@@ -207,6 +211,56 @@ class QTable:
                 self.table[state] = dict()
             for action in average_returns.keys():
                 self.table[state][action] = average_returns[action]
+
+# MC v1
+def monte_carlo(init_policy, initial_state=None, episode_length=100, horizon=100, rollouts=100):
+    average_returns = dict()
+    action_pair_cnts = dict()
+    s = Sim(initial_state, state_transitions)
+    policy = init_policy
+    for r in range(0, rollouts): # It's not really rollouts but improvement cycles...
+        if not initial_state:
+            initial_state = random.choice(states)
+        s.reset(initial_state)  
+        state = s.state  
+        states = []
+        actions = []
+        rewards = []
+        for step in range(0, episode_length):
+            states.append(state)
+            if not state in average_returns.keys():
+                average_returns[state] = dict()
+                action_pair_cnts[state] = dict()
+            action = policy.action(state)
+            actions.append(action)
+            state, reward = s.alter(state, action)
+            rewards.append(reward)
+        print(states)
+        print(actions)
+        print(rewards)
+        for i in range(0, episode_length):
+            _return = 0
+            j = 0
+            while (j + i) < len(rewards):
+                _return += (gamma**j) * rewards[j + i]
+                j += 1
+            if actions[i] in average_returns[states[i]].keys():
+                average_returns[states[i]][actions[i]] += _return
+                action_pair_cnts[states[i]][actions[i]] += 1
+            else:
+                average_returns[states[i]][actions[i]] = _return
+                action_pair_cnts[states[i]][actions[i]] = 1
+    print(average_returns)
+    print(action_pair_cnts)
+    for state in average_returns.keys():
+        for action in average_returns[state].keys():    
+            average_returns[state][action] /= action_pair_cnts[state][action]
+        
+    print(average_returns)
+    
+    return average_returns
+
+        
 
 def teleop(fallback_policy=None):
     gen_policy = dict()
