@@ -174,15 +174,17 @@ class Policy:
                 action = None
         return action
     
-    def from_Table_greedy(self, table):
+    def from_table_greedy(self, table):
         # Assuming table - policy/action agreement
-        print("State overlap: " + str(len(list(table.keys()))/len(list(self.states))))
+        print("My policy's states: " + str(len(self.action_selections.keys())) + "\nState overlap: " + str(len(list(table.keys()))/len(list(self.states))))
+        
         for state in tqdm(self.states):
             if state in table.keys():
             
                 self.action_selections[state] = max(table[state], key=table[state].get)
             else:
-                print("State " + state + " has no data in table.")
+                #print("State " + str(state) + " has no data in table.")
+                pass
 
 
 class QTable:
@@ -211,9 +213,9 @@ class QTable:
                 self.table[state] = dict()
             for action in average_returns.keys():
                 self.table[state][action] = average_returns[action]
-
+"""
 # MC v1
-def monte_carlo(init_policy, initial_state=None, episode_length=100, horizon=100, rollouts=100):
+def rollout_monte_carlo(init_policy, initial_state=None, episode_length=100, horizon=100, rollouts=100):
     average_returns = dict()
     action_pair_cnts = dict()
     s = Sim(initial_state, state_transitions)
@@ -235,9 +237,9 @@ def monte_carlo(init_policy, initial_state=None, episode_length=100, horizon=100
             actions.append(action)
             state, reward = s.alter(state, action)
             rewards.append(reward)
-        print(states)
-        print(actions)
-        print(rewards)
+        #print(states)
+        #print(actions)
+        #print(rewards)
         for i in range(0, episode_length):
             _return = 0
             j = 0
@@ -250,15 +252,63 @@ def monte_carlo(init_policy, initial_state=None, episode_length=100, horizon=100
             else:
                 average_returns[states[i]][actions[i]] = _return
                 action_pair_cnts[states[i]][actions[i]] = 1
-    print(average_returns)
-    print(action_pair_cnts)
+    #print(average_returns)
+    #print(action_pair_cnts)
     for state in average_returns.keys():
         for action in average_returns[state].keys():    
             average_returns[state][action] /= action_pair_cnts[state][action]
         
-    print(average_returns)
+    #print(average_returns)
     
     return average_returns
+"""
+    
+def monte_carlo(init_policy, initial_state=None, episode_length=100, horizon=100, cycles=100):
+    average_returns = dict()
+    action_pair_cnts = dict()
+    s = Sim(initial_state, state_transitions)
+    policy = init_policy
+    for c in range(0, cycles): # It's not really rollouts but improvement cycles...
+        if not initial_state:
+            initial_state = random.choice(states)
+        s.reset(initial_state)  
+        state = s.state  
+        states = []
+        actions = []
+        rewards = []
+        for step in range(0, episode_length):
+            states.append(state)
+            if not state in average_returns.keys():
+                average_returns[state] = dict()
+                action_pair_cnts[state] = dict()
+            action = policy.action(state)
+            actions.append(action)
+            state, reward = s.alter(state, action)
+            rewards.append(reward)
+        #print(states)
+        #print(actions)
+        #print(rewards)
+        for i in range(0, episode_length):
+            _return = 0
+            j = 0
+            while (j + i) < len(rewards):
+                _return += (gamma**j) * rewards[j + i]
+                j += 1
+            if actions[i] in average_returns[states[i]].keys():
+                average_returns[states[i]][actions[i]] += _return
+                action_pair_cnts[states[i]][actions[i]] += 1
+            else:
+                average_returns[states[i]][actions[i]] = _return
+                action_pair_cnts[states[i]][actions[i]] = 1
+        #print(average_returns)
+        #print(action_pair_cnts)
+        for state in average_returns.keys():
+            for action in average_returns[state].keys():    
+                average_returns[state][action] /= action_pair_cnts[state][action]
+        policy.from_table_greedy(average_returns)
+    
+    print(average_returns)
+    return policy
 
         
 
