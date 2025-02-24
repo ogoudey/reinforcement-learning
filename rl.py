@@ -213,7 +213,7 @@ class QTable:
                 self.table[state] = dict()
             for action in average_returns.keys():
                 self.table[state][action] = average_returns[action]
-"""
+
 # MC v1
 def rollout_monte_carlo(init_policy, initial_state=None, episode_length=100, horizon=100, rollouts=100):
     average_returns = dict()
@@ -261,7 +261,7 @@ def rollout_monte_carlo(init_policy, initial_state=None, episode_length=100, hor
     #print(average_returns)
     
     return average_returns
-"""
+
     
 def monte_carlo(init_policy, initial_state=None, episode_length=100, horizon=100, cycles=100):
     average_returns = dict()
