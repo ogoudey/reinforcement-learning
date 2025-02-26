@@ -6,6 +6,7 @@ from tqdm import tqdm
 
 import numpy as np
 
+
 np.set_printoptions(threshold=np.inf)
 states = set()
 state_transitions = dict()
@@ -45,7 +46,8 @@ _map(0,0)
 state_transitions[(11,11)] = {"N":(11,11), "S":(11,11), "E":(11,11), "W":(11,11)}
 gamma = 0.9
 actions = {"N", "S", "E", "W"}
-rewards = {(11,10):{"E":100}, (10,11):{"S":100}}
+#rewards = {(11,10):{"E":100}, (10,11):{"S":100}}
+rewards = {(11,10):{"E":100}, (10,11):{"S":100}, (5,4):{"E":-50}, (4,5):{"S":-50}}
 initial_state = (0,0)
 
 def value(state, action, policy, sim, horizon=5):
@@ -72,7 +74,7 @@ def render(state, reward=0):
     print(str(state) + ", " + str(reward))
 
 class Sim:
-    def __init__(self, initial_state, state_transitions, init_rewards={(11,10):{"E":100}, (10,11):{"S":100}}):
+    def __init__(self, initial_state, state_transitions, init_rewards=None):
         self.initial_state = initial_state
         self.state = initial_state
         self.state_transitions = state_transitions
@@ -102,7 +104,7 @@ class Sim:
                self.state, reward = self.alter(self.state, action)
                render(self.state, reward)
                if reward == 100:
-                   render(self.state, "100 reward received.")
+                   render(self.state, "Reward received.")
                    time.sleep(3)
                    break
                time.sleep(1)
@@ -154,12 +156,11 @@ class Sim:
         return new_state, reward
 
 class Policy:
-    def __init__(self, states, actions, preset=None, random=False):
+    def __init__(self, actions, preset=None, random=False):
         if preset:
             self.action_selections = preset # States -> A
         else:
             self.action_selections = dict()
-        self.states = states
         self.actions = actions
         self.random = random
     
@@ -176,15 +177,11 @@ class Policy:
     
     def from_table_greedy(self, table):
         # Assuming table - policy/action agreement
-        print("My policy's states: " + str(len(self.action_selections.keys())) + "\nState overlap: " + str(len(list(table.keys()))/len(list(self.states))))
+
         
-        for state in tqdm(self.states):
-            if state in table.keys():
-            
-                self.action_selections[state] = max(table[state], key=table[state].get)
-            else:
-                #print("State " + str(state) + " has no data in table.")
-                pass
+        for state in tqdm(table.keys()):
+            self.action_selections[state] = max(table[state], key=table[state].get)
+
 
 
 class QTable:
@@ -218,7 +215,7 @@ class QTable:
 def rollout_monte_carlo(init_policy, initial_state=None, episode_length=100, horizon=100, rollouts=100):
     average_returns = dict()
     action_pair_cnts = dict()
-    s = Sim(initial_state, state_transitions)
+    s = Sim(initial_state, state_transitions, init_rewards={(11,10):{"E":1000}, (10,11):{"S":1000}, (5,4):{"E":-1}, (4,5):{"S":-1}})
     policy = init_policy
     for r in range(0, rollouts): # It's not really rollouts but improvement cycles...
         if not initial_state:
