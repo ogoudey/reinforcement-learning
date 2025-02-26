@@ -9,41 +9,41 @@ import numpy as np
 
 np.set_printoptions(threshold=np.inf)
 states = set()
-state_transitions = dict()
+position_transitions = dict()
 m = np.zeros((12,12))
 mapped = []
 
 def _map(y,x):
     states.add((y,x))
     mapped.append((y,x))
-    state_transitions[(y,x)] = dict()
+    position_transitions[(y,x)] = dict()
     if x + 1 >= m.shape[0]:
-        state_transitions[(y,x)]["E"] = (y,x)
+        position_transitions[(y,x)]["E"] = (y,x)
     else:
-        state_transitions[(y,x)]["E"] = (y,x + 1)
+        position_transitions[(y,x)]["E"] = (y,x + 1)
         if not (y,x + 1) in mapped:
             _map(y,x+1)
     if x - 1 < 0:
-        state_transitions[(y,x)]["W"] = (y,x)
+        position_transitions[(y,x)]["W"] = (y,x)
     else:
-        state_transitions[(y,x)]["W"] = (y,x - 1)
+        position_transitions[(y,x)]["W"] = (y,x - 1)
         if not (y,x - 1) in mapped:
             _map(y,x-1)
     if y + 1 >= m.shape[0]:
-        state_transitions[(y,x)]["S"] = (y,x)
+        position_transitions[(y,x)]["S"] = (y,x)
     else:
-        state_transitions[(y,x)]["S"] = (y + 1,x)
+        position_transitions[(y,x)]["S"] = (y + 1,x)
         if not (y+1,x) in mapped:
             _map(y+1,x)
     if y - 1 < 0:
-        state_transitions[(y,x)]["N"] = (y,x)
+        position_transitions[(y,x)]["N"] = (y,x)
     else:
-        state_transitions[(y,x)]["N"] = (y-1,x)
+        position_transitions[(y,x)]["N"] = (y-1,x)
         if not (y-1,x) in mapped:
             _map(y-1,x)
 
 _map(0,0)
-state_transitions[(11,11)] = {"N":(11,11), "S":(11,11), "E":(11,11), "W":(11,11)}
+position_transitions[(11,11)] = {"N":(11,11), "S":(11,11), "E":(11,11), "W":(11,11)}
 gamma = 0.9
 actions = {"N", "S", "E", "W"}
 #rewards = {(11,10):{"E":100}, (10,11):{"S":100}}
@@ -76,10 +76,11 @@ def render(state, reward=0):
     print(str(state) + ", " + str(reward))
 
 class Sim:
-    def __init__(self, initial_state, state_transitions, init_rewards=None):
+    def __init__(self, initial_state, position_transitions, init_rewards=None):
         self.initial_state = initial_state
         self.state = initial_state
-        self.state_transitions = state_transitions
+        self.position_transitions = position_transitions
+        
         if init_rewards:
             self.init_rewards = init_rewards # preserve init rewards
         else:
@@ -91,9 +92,11 @@ class Sim:
             self.state = initial_state
         else:
             self.state =  self.initial_state
-        self.rewards = copy.deepcopy(self.init_rewards)
+        print(initial_state)
+        self.set_reward_for_goal(initial_state[1], 100)
         
-    def visualize(self, policy, h, initial_state=None, no_reset=False):
+        
+    def visualize(self, policy, h=100, initial_state=None, no_reset=False):
         if not initial_state:
             initial_state = self.initial_state
         if no_reset:
@@ -131,6 +134,7 @@ class Sim:
         from_state = (goal[0], goal[1] - 1)
         self.init_rewards[from_state] = dict()
         self.init_rewards[from_state]["E"] = quantity
+        self.rewards = copy.deepcopy(self.init_rewards)
            
            
     def test(self, policy, n=1000, h=100, initial_state=None):
@@ -147,21 +151,21 @@ class Sim:
 
         
     def alter(self, inc_state, action):
-        state = inc_state[0] # the state relevant for altering
+        position = inc_state[0] # the state relevant for altering
         if action:
-            if state in self.state_transitions.keys():
-                if action in self.state_transitions[state]: # should be if Line l - 5 is complete
-                    new_state = self.state_transitions[state][action]
+            if position in self.position_transitions.keys():
+                if action in self.position_transitions[position]: # should be if Line l - 5 is complete
+                    new_state = self.position_transitions[position][action]
                 else:
-                    new_state = state
+                    new_state = position
             else:
-                new_state = state
+                new_state = position
                 
-            if state in self.rewards.keys():
-                if action in self.rewards[state]:
-                    reward = self.rewards[state][action]
+            if position in self.rewards.keys():
+                if action in self.rewards[position]:
+                    reward = self.rewards[position][action]
                     #print("resetting " + str(self.rewards[state][action]))
-                    self.rewards[state][action] = 0 # So rewards can not be 'farmed'
+                    self.rewards[position][action] = 0 # So rewards can not be 'farmed'
                     #print(self.init_rewards[state][action])
                 else:
                     reward = 0
@@ -169,13 +173,13 @@ class Sim:
                 reward = 0
                 
         else:
-            new_state = state
+            new_state = position
             reward = 0
         real_state = (new_state, inc_state[1])
         return real_state, reward
 
 class Policy:
-    def __init__(self, actions, preset=None, random=False):
+    def __init__(self, actions, preset=None, random=True):
         if preset:
             self.action_selections = preset # States -> A
         else:
@@ -234,16 +238,12 @@ class QTable:
 def rollout_monte_carlo(init_policy, initial_position=None, episode_length=100, horizon=100, rollouts=100):
     average_returns = dict()
     action_pair_cnts = dict()
-    s = Sim(initial_position, state_transitions, init_rewards=None)
+    s = Sim(initial_position, position_transitions, init_rewards=None)
     policy = init_policy
-    for goal in s.state_transitions.keys():
-        for r in range(0, int(rollouts /len(list(s.state_transitions.keys())))): # It's not really rollouts but improvement cycles...
+    for goal in s.position_transitions.keys():
+        #print(goal)
+        for r in range(0, int(rollouts /len(list(s.position_transitions.keys())))): # It's not really rollouts but improvement cycles...
             
-            
-            s.set_reward_for_goal(goal, 100)
-
-            if not initial_state:
-                initial_position = random.choice(states)
             s.reset((initial_position, goal)) 
             state = s.state  
             states = []
@@ -255,12 +255,14 @@ def rollout_monte_carlo(init_policy, initial_position=None, episode_length=100, 
                     average_returns[state] = dict()
                     action_pair_cnts[state] = dict()
                 action = policy.action(state)
+                #print(action)
                 actions.append(action)
                 state, reward = s.alter(state, action)
+                #print(state)
                 rewards.append(reward)
             #print(states)
             #print(actions)
-            #print(rewards)
+
             for i in range(0, episode_length):
                 _return = 0
                 j = 0
@@ -272,7 +274,8 @@ def rollout_monte_carlo(init_policy, initial_position=None, episode_length=100, 
                     action_pair_cnts[states[i]][actions[i]] += 1
                 else:
                     average_returns[states[i]][actions[i]] = _return
-                    action_pair_cnts[states[i]][actions[i]] = 1
+                    action_pair_cnts[states[i]][actions[i]] = 1   
+    print("Goal has " + str(int(rollouts /len(list(s.position_transitions.keys())))) + " rollouts")
     #print(average_returns)
     #print(action_pair_cnts)
     for state in average_returns.keys():
@@ -287,7 +290,7 @@ def rollout_monte_carlo(init_policy, initial_position=None, episode_length=100, 
 def monte_carlo(init_policy, initial_state=None, episode_length=100, horizon=100, cycles=100):
     average_returns = dict()
     action_pair_cnts = dict()
-    s = Sim(initial_state, state_transitions)
+    s = Sim(initial_state, position_transitions)
     policy = init_policy
     for c in range(0, cycles): # It's not really rollouts but improvement cycles...
         if not initial_state:
@@ -335,7 +338,7 @@ def monte_carlo(init_policy, initial_state=None, episode_length=100, horizon=100
 
 def teleop(fallback_policy=None):
     gen_policy = dict()
-    s = Sim(initial_state, state_transitions, rewards.copy())
+    s = Sim(initial_state, position_transitions, rewards.copy())
     state = s.initial_state
     render(state, "...")
     try:    
