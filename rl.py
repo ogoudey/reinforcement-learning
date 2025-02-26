@@ -47,8 +47,10 @@ state_transitions[(11,11)] = {"N":(11,11), "S":(11,11), "E":(11,11), "W":(11,11)
 gamma = 0.9
 actions = {"N", "S", "E", "W"}
 #rewards = {(11,10):{"E":100}, (10,11):{"S":100}}
-rewards = {(11,10):{"E":100}, (10,11):{"S":100}, (5,4):{"E":-50}, (4,5):{"S":-50}}
+rewards = {(11,10):{"E":100}, (10,11):{"S":100}}
 initial_state = (0,0)
+
+
 
 def value(state, action, policy, sim, horizon=5):
     sim.reset()
@@ -69,7 +71,7 @@ def value(state, action, policy, sim, horizon=5):
 
 def render(state, reward=0):
     n = m.copy()
-    n[state] = 1
+    n[state[0]] = 1
     print(n)
     print(str(state) + ", " + str(reward))
 
@@ -78,7 +80,10 @@ class Sim:
         self.initial_state = initial_state
         self.state = initial_state
         self.state_transitions = state_transitions
-        self.init_rewards = init_rewards # preserve init rewards
+        if init_rewards:
+            self.init_rewards = init_rewards # preserve init rewards
+        else:
+            self.init_rewards = dict()
         self.rewards = copy.deepcopy(self.init_rewards)
         
     def reset(self, initial_state=None):
@@ -111,8 +116,21 @@ class Sim:
         except KeyboardInterrupt:
             return self.state
             print("\nExiting visualization.")
-           
-           
+    
+    def set_reward_for_goal(self, goal, quantity):
+        self.init_rewards = dict()
+        from_state = (goal[0] + 1, goal[1])
+        self.init_rewards[from_state] = dict()
+        self.init_rewards[from_state]["N"] = quantity
+        from_state = (goal[0] - 1, goal[1])
+        self.init_rewards[from_state] = dict()
+        self.init_rewards[from_state]["S"] = quantity
+        from_state = (goal[0], goal[1] + 1)
+        self.init_rewards[from_state] = dict()
+        self.init_rewards[from_state]["W"] = quantity
+        from_state = (goal[0], goal[1] - 1)
+        self.init_rewards[from_state] = dict()
+        self.init_rewards[from_state]["E"] = quantity
            
            
     def test(self, policy, n=1000, h=100, initial_state=None):
@@ -128,7 +146,8 @@ class Sim:
         print("Average cumulative reward over " + str(n) + " tries: " + str(rewards))
 
         
-    def alter(self, state, action):
+    def alter(self, inc_state, action):
+        state = inc_state[0] # the state relevant for altering
         if action:
             if state in self.state_transitions.keys():
                 if action in self.state_transitions[state]: # should be if Line l - 5 is complete
@@ -152,8 +171,8 @@ class Sim:
         else:
             new_state = state
             reward = 0
-            
-        return new_state, reward
+        real_state = (new_state, inc_state[1])
+        return real_state, reward
 
 class Policy:
     def __init__(self, actions, preset=None, random=False):
@@ -212,43 +231,48 @@ class QTable:
                 self.table[state][action] = average_returns[action]
 
 # MC v1
-def rollout_monte_carlo(init_policy, initial_state=None, episode_length=100, horizon=100, rollouts=100):
+def rollout_monte_carlo(init_policy, initial_position=None, episode_length=100, horizon=100, rollouts=100):
     average_returns = dict()
     action_pair_cnts = dict()
-    s = Sim(initial_state, state_transitions, init_rewards={(11,10):{"E":1000}, (10,11):{"S":1000}, (5,4):{"E":-1}, (4,5):{"S":-1}})
+    s = Sim(initial_position, state_transitions, init_rewards=None)
     policy = init_policy
-    for r in range(0, rollouts): # It's not really rollouts but improvement cycles...
-        if not initial_state:
-            initial_state = random.choice(states)
-        s.reset(initial_state)  
-        state = s.state  
-        states = []
-        actions = []
-        rewards = []
-        for step in range(0, episode_length):
-            states.append(state)
-            if not state in average_returns.keys():
-                average_returns[state] = dict()
-                action_pair_cnts[state] = dict()
-            action = policy.action(state)
-            actions.append(action)
-            state, reward = s.alter(state, action)
-            rewards.append(reward)
-        #print(states)
-        #print(actions)
-        #print(rewards)
-        for i in range(0, episode_length):
-            _return = 0
-            j = 0
-            while (j + i) < len(rewards):
-                _return += (gamma**j) * rewards[j + i]
-                j += 1
-            if actions[i] in average_returns[states[i]].keys():
-                average_returns[states[i]][actions[i]] += _return
-                action_pair_cnts[states[i]][actions[i]] += 1
-            else:
-                average_returns[states[i]][actions[i]] = _return
-                action_pair_cnts[states[i]][actions[i]] = 1
+    for goal in s.state_transitions.keys():
+        for r in range(0, int(rollouts /len(list(s.state_transitions.keys())))): # It's not really rollouts but improvement cycles...
+            
+            
+            s.set_reward_for_goal(goal, 100)
+
+            if not initial_state:
+                initial_position = random.choice(states)
+            s.reset((initial_position, goal)) 
+            state = s.state  
+            states = []
+            actions = []
+            rewards = []
+            for step in range(0, episode_length):
+                states.append(state)
+                if not state in average_returns.keys():
+                    average_returns[state] = dict()
+                    action_pair_cnts[state] = dict()
+                action = policy.action(state)
+                actions.append(action)
+                state, reward = s.alter(state, action)
+                rewards.append(reward)
+            #print(states)
+            #print(actions)
+            #print(rewards)
+            for i in range(0, episode_length):
+                _return = 0
+                j = 0
+                while (j + i) < len(rewards):
+                    _return += (gamma**j) * rewards[j + i]
+                    j += 1
+                if actions[i] in average_returns[states[i]].keys():
+                    average_returns[states[i]][actions[i]] += _return
+                    action_pair_cnts[states[i]][actions[i]] += 1
+                else:
+                    average_returns[states[i]][actions[i]] = _return
+                    action_pair_cnts[states[i]][actions[i]] = 1
     #print(average_returns)
     #print(action_pair_cnts)
     for state in average_returns.keys():
